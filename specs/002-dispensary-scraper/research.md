@@ -85,28 +85,46 @@ function log(msg) {
 
 ---
 
-## 5. Test Runner: Node.js Built-in `node:test`
+## 5. Language: TypeScript
 
-**Decision**: Use Node.js v18+ built-in `node:test` with `node:assert` for all unit and integration tests. No Jest or external test framework.
+**Decision**: Use TypeScript 5.x in strict mode. Compile to `dist/` via `tsc`; run via `tsx` in development (no compile step). Source files use `.ts` extension with ESM (`"type": "module"` in `package.json`).
 
-**Rationale**: The project has simple, well-bounded test needs: unit tests for the filter function and email formatter, integration test for the scraper. Node's built-in runner (stable since Node 20, available in 18 as experimental) requires zero setup, has ~5× faster startup than Jest, supports native ESM, and keeps `package.json` dependencies minimal. The `node:test` TAP output is sufficient for solo development.
+**Rationale**: The node-puppeteer agent and skill (`.claude/agents/node-puppeteer.md`) require TypeScript. TypeScript provides type-safe selectors, typed `Product` and `ScrapeResult` shapes, and compile-time validation of Puppeteer API usage. For a project where scraper correctness is critical, strict typing catches entire classes of bugs (missing fields, wrong element types) before runtime. `tsx` eliminates the dev-loop overhead of a compile step.
+
+**Key config**:
+- `tsconfig.json`: `"strict": true`, `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"outDir": "dist"`, `"target": "ES2022"`
+- Dev: `npx tsx src/index.ts`
+- Build: `npx tsc`
+- Type-check only: `npx tsc --noEmit`
 
 **Alternatives considered**:
-- Jest — standard for React/frontend projects; adds babel/transform config overhead; recommended when snapshot testing or complex mocking is needed.
-- Vitest — excellent if the project used Vite; unnecessary here.
-- Mocha + Chai — older but stable; adds two packages where zero are needed.
+- Plain JavaScript ESM — simpler setup but no compile-time type safety; ruled out by agent requirements.
+- JSDoc type annotations — partial type safety without a compiler; not equivalent to strict TypeScript.
 
 ---
 
-## 6. Configuration Management
+## 6. Test Runner: Vitest
 
-**Decision**: Use `dotenv` to load `.env` for secrets/credentials, and a plain `selectors.json` file for CSS selectors. Both are loaded once at startup via a `config.js` module.
+**Decision**: Use Vitest for all unit and integration tests. ESM-native, no Babel config, works seamlessly with TypeScript via `tsx`.
 
-**Rationale**: Secrets (email credentials, target URL, recipient address) must not be hardcoded. `dotenv` is the de-facto standard for Node.js CLI environment config. CSS selectors are externalized to `selectors.json` so the site's DOM structure can change without requiring a code edit — only the JSON file needs updating (SC-004).
+**Rationale**: Vitest is the recommended test runner in the node-puppeteer skill. It supports TypeScript natively, has Jest-compatible APIs (`describe`, `it`, `expect`, `vi.fn()`), and requires no additional transform config for ESM + TypeScript projects. `vi.mock()` provides clean Puppeteer `Page` mocking for unit tests.
 
 **Alternatives considered**:
+- `node:test` built-in — zero dependencies, but requires manual TypeScript compilation before running; no built-in mocking utilities for Puppeteer fakes.
+- Jest — requires `ts-jest` or `babel-jest` transform config; more setup for TypeScript + ESM.
+- Mocha + Chai — adds two packages; no first-class TypeScript or ESM support out of the box.
+
+---
+
+## 7. Configuration Management
+
+**Decision**: Use `dotenv` to load `.env` for secrets/credentials, and a plain `selectors.json` file for CSS selectors. Both are loaded once at startup via a `config.ts` module with Zod validation (`z.parse(process.env)`).
+
+**Rationale**: Secrets (email credentials, target URL, recipient address) must not be hardcoded. `dotenv` is the de-facto standard for Node.js CLI environment config. CSS selectors are externalized to `selectors.json` so the site's DOM structure can change without requiring a code edit — only the JSON file needs updating (SC-004). Zod validation at startup provides typed config and fails fast with a descriptive error before any browser is launched.
+
+**Alternatives considered**:
+- Plain `process.env` access without validation — no type safety, missing vars silently become `undefined`.
 - YAML config — adds a parse dependency; JSON is natively supported by Node.
-- Command-line arguments — less ergonomic for frequently-used values like credentials.
 - Single `.env` for everything including selectors — selectors are not secrets and benefit from structured JSON format.
 
 ---
@@ -115,10 +133,12 @@ function log(msg) {
 
 | Concern | Decision | Key Reason |
 |---------|----------|------------|
+| Language | TypeScript 5.x strict | Type-safe scraping; required by node-puppeteer agent |
+| Runtime | Node.js v18+ | LTS, native ESM |
 | Browser automation | Puppeteer | Spec requirement; headless Chromium |
 | Iframe handling | `contentFrame()` | Standard Puppeteer pattern |
 | Lazy-load scroll | Card-count loop (max 5) | Reliable exit condition |
 | Email | Nodemailer + Gmail SMTP port 587 | App Password, no OAuth2 complexity |
 | Logging | Native `fs` stream | Zero dependencies, solo tool |
-| Testing | `node:test` | Zero dependencies, Node 18+ built-in |
-| Config | dotenv + selectors.json | Secrets vs structure separation |
+| Testing | Vitest | ESM + TypeScript native; vi.mock() for Puppeteer |
+| Config | dotenv + Zod + selectors.json | Type-safe env validation + structure separation |
