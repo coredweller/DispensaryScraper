@@ -1,6 +1,16 @@
 # Dispensary Scraper
 
-Scrapes the [Krystal Leaves](https://www.krystaleaves.com/menu) dispensary menu, filters for Viola and 710 Labs flower strains, and emails the results.
+Scrapes the [Krystal Leaves](https://www.krystaleaves.com/menu) dispensary menu via the Dutchie GraphQL API, filters for Viola and 710 Labs flower strains, and emails the results.
+
+## How it works
+
+The menu is served inside a Dutchie embedded iframe protected by Cloudflare. Rather than scraping DOM elements, the scraper:
+
+1. Loads `krystaleaves.com` in a headless browser to establish a real browser session
+2. Intercepts the `FilteredProducts` GraphQL API responses Dutchie makes naturally during page load
+3. For any pages not captured by interception, fetches them directly from within the Dutchie frame context (same-origin, so CORS is not an issue)
+
+No CSS selectors are needed.
 
 ## Prerequisites
 
@@ -24,29 +34,19 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` and fill in all required values:
+Edit `.env` and fill in your credentials:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `BRANDS` | Yes | Comma-separated brand names, e.g. `Viola,710 Labs` |
 | `GMAIL_USER` | Yes | Your Gmail address (sender) |
 | `GMAIL_PASS` | Yes | Your 16-character Gmail App Password |
 | `RECIPIENT_EMAIL` | Yes | Email address to receive the report |
-| `TARGET_URL` | No | Menu URL (defaults to Krystal Leaves menu) |
+| `BRANDS` | No | Comma-separated brand names (default: `Viola,710 Labs`) |
+| `TARGET_URL` | No | Menu URL (default: Krystal Leaves menu) |
 | `HEADLESS` | No | Set to `false` to watch the browser (default: `true`) |
 | `DEBUG_SCREENSHOT_PATH` | No | Screenshot path on failure (default: `screenshots/debug.png`) |
 
-### 3. Populate selectors
-
-Open `selectors.json` and fill in the CSS selectors for the menu page. To inspect them visually:
-
-```bash
-HEADLESS=false npm run dev
-```
-
-Watch the browser navigate the menu and use DevTools to find the correct selectors. See [Selector Inspection Guide](#selector-inspection-guide) below.
-
-### 4. Verify setup
+### 3. Verify setup
 
 ```bash
 npm run typecheck   # TypeScript type-check — must have zero errors
@@ -59,15 +59,13 @@ npm test            # Run unit tests — all must pass
 
 ```bash
 npm run dev
-# or: npx tsx src/index.ts
 ```
 
 **Production (compiled):**
 
 ```bash
-npm run build        # Compile TypeScript to dist/
-npm start            # Run compiled output
-# or: node dist/index.js
+npm run build   # Compile TypeScript to dist/
+npm start       # Run compiled output
 ```
 
 ## Exit Codes
@@ -76,7 +74,7 @@ npm start            # Run compiled output
 |------|---------|
 | `0` | Success — email sent |
 | `1` | Config or network error — check `.env` and internet connection |
-| `2` | Navigation error — Flower category not found; check `selectors.json` |
+| `2` | Scraping error — no products found |
 | `3` | Email delivery error — check Gmail credentials |
 
 ## Scheduling
@@ -106,38 +104,32 @@ To edit your crontab: `crontab -e`
 
 ## Logs
 
-Each run appends to `logs/YYYY-MM-DD.log`. Example output:
+Each run appends to `logs/YYYY-MM-DD.log`. Example:
 
 ```
-[2026-03-28T14:00:01.000Z] Starting scraper — target: https://www.krystaleaves.com/menu
-[2026-03-28T14:00:05.000Z] Flower category loaded — 42 products found
-[2026-03-28T14:00:05.100Z] Filter applied — 5 matching products (Viola: 3, 710 Labs: 2)
-[2026-03-28T14:00:07.000Z] Email sent to you@example.com
-[2026-03-28T14:00:07.100Z] Done — 6.1s — exit code 0
+[2026-03-29T14:09:19.530Z] Navigating to https://www.krystaleaves.com/menu (attempt 1/3)
+[2026-03-29T14:09:23.614Z] Menu page loaded (networkidle2 reached)
+[2026-03-29T14:09:27.354Z] Intercepted Flower page 0: 25 products (totalPages: 3)
+[2026-03-29T14:09:27.649Z] Fetching Flower page 1 via Dutchie frame
+[2026-03-29T14:09:27.703Z] Extraction complete — 30 valid products
+[2026-03-29T14:09:28.408Z] Browser closed
 ```
-
-## Selector Inspection Guide
-
-If the menu structure changes and the scraper stops finding products, update `selectors.json`:
-
-1. Set `HEADLESS=false` in `.env`
-2. Run `npm run dev`
-3. When the browser opens, press F12 to open DevTools
-4. Use the element picker to find selectors for:
-   - The embedded iframe (if the menu is in an iframe)
-   - The "Flower" category link
-   - Individual product card wrappers
-   - Brand name, strain name, type, THC%, and weight/price elements within a card
-5. Update `selectors.json` with the new values
-6. Re-run to verify
 
 ## Troubleshooting
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| Exit code 1: missing env vars | `.env` not configured | Copy `.env.example` → `.env` and fill in all values |
-| Exit code 2: Flower link not found | Selectors outdated | Inspect menu with `HEADLESS=false` and update `selectors.json` |
+| Exit code 1: missing env vars | `.env` not configured | Fill in `GMAIL_USER`, `GMAIL_PASS`, and `RECIPIENT_EMAIL` |
+| Exit code 1: no products found | Dutchie API changed or site unreachable | Check `screenshots/debug.png`; the APQ hash in `src/scraper.ts` may need updating |
 | Exit code 3: SMTP auth failure | Wrong App Password | Generate a new App Password at myaccount.google.com/apppasswords |
-| No products extracted | `productCard` selector wrong | Update `productCard` selector in `selectors.json` |
-| Empty email received | `BRANDS` doesn't match | Check brand names match exactly (case-insensitive); `710labs` is auto-normalized |
+| Empty email | `BRANDS` doesn't match | Brand matching is case-insensitive; `710labs` and `710 Labs` both work |
 | Screenshot saved to `screenshots/debug.png` | Navigation failed | Open screenshot to see browser state at time of failure |
+
+### If the Dutchie API stops working
+
+The scraper uses an APQ (Automatic Persisted Query) hash. If Dutchie updates their API, you may need to update `DUTCHIE_APQ_HASH` in [src/scraper.ts](src/scraper.ts):
+
+1. Open Chrome DevTools on `https://www.krystaleaves.com/menu`
+2. Go to the **Network** tab and filter by `FilteredProducts`
+3. Find a `api-0/graphql` request and copy the `sha256Hash` from the `extensions` query parameter
+4. Update `DUTCHIE_APQ_HASH` in `src/scraper.ts`
