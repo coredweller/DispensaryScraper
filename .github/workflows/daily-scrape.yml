@@ -1,0 +1,26 @@
+name: Daily Dispensary Scrape
+
+on:
+  schedule:
+    - cron: '0 15 * * *'  # 9am MT (MDT, UTC-6) — runs at 10am during MST (Nov–Mar)
+  workflow_dispatch:       # allow manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm start
+        env:
+          BRANDS: ${{ secrets.BRANDS }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          HEADLESS: 'true'

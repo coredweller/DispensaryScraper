@@ -221,6 +221,7 @@ export async function scrape(config: AppConfig): Promise<Product[]> {
     browser = await puppeteer.launch({
       headless: config.headless,
       defaultViewport: { width: 1280, height: 800 },
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
