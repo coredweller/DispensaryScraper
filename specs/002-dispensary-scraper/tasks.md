@@ -17,10 +17,11 @@
 
 **Purpose**: Project initialization and directory structure
 
-- [ ] T001 Initialize Node.js project — create `package.json` with `puppeteer`, `nodemailer`, `dotenv` dependencies and `"type": "module"` (ESM)
-- [ ] T002 Create directory structure: `src/`, `tests/unit/`, `tests/integration/`, `logs/`, `screenshots/` — add `.gitkeep` to `logs/` and `screenshots/`
-- [ ] T003 [P] Create `.gitignore` — exclude `node_modules/`, `.env`, `logs/`, `screenshots/`
-- [ ] T004 [P] Create `.env.example` with all required variables: `TARGET_URL`, `BRANDS`, `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`, `HEADLESS`, `DEBUG_SCREENSHOT_PATH`
+- [X] T001 Initialize Node.js project — create `package.json` with `"type": "module"` (ESM); dependencies: `puppeteer`, `nodemailer`, `dotenv`, `zod`; devDependencies: `typescript`, `tsx`, `vitest`, `@types/node`, `@types/nodemailer`
+- [X] T002 Create `tsconfig.json` — strict mode, NodeNext modules, `outDir: dist`, `target: ES2022`
+- [X] T003 Create directory structure: `src/`, `tests/unit/`, `tests/integration/`, `logs/`, `screenshots/`, `dist/` — add `.gitkeep` to `logs/` and `screenshots/`
+- [X] T004 [P] Create `.gitignore` — exclude `node_modules/`, `.env`, `logs/`, `screenshots/`, `dist/`
+- [X] T005 [P] Create `.env.example` with all required variables: `TARGET_URL`, `BRANDS`, `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`, `HEADLESS`, `DEBUG_SCREENSHOT_PATH`
 
 ---
 
@@ -30,11 +31,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Implement `src/config.js` — load `.env` via dotenv, load and parse `selectors.json`, validate all required env vars (`BRANDS`, `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`); log descriptive error and call `process.exit(1)` on any missing value
-- [ ] T006 Implement `src/logger.js` — create write stream to `logs/YYYY-MM-DD.log` in append mode using native `fs`; export `log(msg)` function that writes ISO-8601-prefixed line to both `process.stdout` and the file stream
-- [ ] T007 [P] Create `selectors.json` at project root with all keys from the `SelectorConfig` contract (`iframeContainer`, `flowerCategoryLink`, `flowerCategoryLinkFallback`, `productCard`, `brandLabel`, `strainName`, `strainType`, `thcPercent`, `weightPriceTier`) — set placeholder values (empty strings) to be populated in Phase 8
+- [X] T006 Implement `src/types.ts` — export shared TypeScript interfaces: `Product`, `ScrapeResult`, `EmailNotification`, `SelectorConfig`, `AppConfig`
+- [X] T007 Implement `src/config.ts` — load `.env` via dotenv; validate all required env vars (`BRANDS`, `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`) using `z.object({...}).parse(process.env)`; load and parse `selectors.json`; log descriptive error and call `process.exit(1)` on any missing/invalid value; export typed `AppConfig`
+- [X] T008 Implement `src/logger.ts` — create write stream to `logs/YYYY-MM-DD.log` in append mode using native `fs`; export `log(msg: string)` function that writes ISO-8601-prefixed line to both `process.stdout` and the file stream
+- [X] T009 [P] Create `selectors.json` at project root with all keys from the `SelectorConfig` contract (`iframeContainer`, `flowerCategoryLink`, `flowerCategoryLinkFallback`, `productCard`, `brandLabel`, `strainName`, `strainType`, `thcPercent`, `weightPriceTier`) — set placeholder values (empty strings) to be populated in Phase 8
 
-**Checkpoint**: `src/config.js` and `src/logger.js` importable and unit-testable before any story work begins
+**Checkpoint**: `src/config.ts` and `src/logger.ts` importable and type-checkable before any story work begins
 
 ---
 
@@ -42,14 +44,14 @@
 
 **Goal**: Puppeteer navigates to the menu, detects and enters any iframe, clicks Flower, scrolls through lazy-loaded products, and returns a raw array of `Product` objects.
 
-**Independent Test**: Run `node -e "import('./src/scraper.js').then(m => m.scrape()).then(r => console.log(r))"` and verify a non-empty array of products is logged to console; check `logs/` for a dated log file.
+**Independent Test**: Run `npx tsx -e "import('./src/scraper.js').then(m => m.scrape()).then(r => console.log(r))"` and verify a non-empty array of products is logged to console; check `logs/` for a dated log file.
 
-- [ ] T008 [US1] Implement `src/scraper.js` — export async `scrape()` function: launch Puppeteer with `headless` from config, navigate to `TARGET_URL` with `waitUntil: 'networkidle2'`; log start and page-load events via logger
-- [ ] T009 [US1] Add iframe detection to `src/scraper.js` — after page load, check for `iframeContainer` selector; if found, switch operating context to `iframeHandle.contentFrame()`; if not found, continue on top-level page; log which context is in use
-- [ ] T010 [US1] Add Flower category click to `src/scraper.js` — attempt `flowerCategoryLink` selector first; if not found within 15s, fall back to scanning all `<a>` elements by `innerText === 'Flower'`; if both fail, save screenshot to `DEBUG_SCREENSHOT_PATH` and throw error with exit code 2
-- [ ] T011 [US1] Add lazy-load scroll loop to `src/scraper.js` — scroll one viewport at a time via `page.evaluate(() => window.scrollBy(0, window.innerHeight))`; wait 1500ms; compare `productCard` count before and after; exit loop when count stabilizes or 5 iterations reached
-- [ ] T012 [US1] Add product extraction to `src/scraper.js` — for each element matching `productCard` selector, extract `strainName`, `brand`, `strainType`, `thcPercent`, and weight/price tiers; select the tier with the largest numeric weight as `maxWeight`/`maxPrice`; skip cards missing `strainName` or `brand` with a warning log; return `Product[]`
-- [ ] T013 [US1] Add site-unreachable retry logic to `src/scraper.js` — wrap navigation in a loop: retry up to 3 times with 10s delay on `net::ERR_*` or timeout errors; after 3 failures log error and throw with exit code 1
+- [X] T010 [US1] Implement `src/scraper.ts` — export async `scrape(config: AppConfig): Promise<Product[]>` function: launch Puppeteer with `headless` from config, navigate to `TARGET_URL` with `waitUntil: 'networkidle2'`; log start and page-load events via logger; block image/font/media resources with `page.setRequestInterception(true)`
+- [X] T011 [US1] Add iframe detection to `src/scraper.ts` — after page load, check for `iframeContainer` selector; if found, switch operating context to `iframeHandle.contentFrame()`; if not found, continue on top-level page; log which context is in use
+- [X] T012 [US1] Add Flower category click to `src/scraper.ts` — attempt `flowerCategoryLink` selector first; if not found within 15s, fall back to scanning all `<a>` elements by `innerText === 'Flower'`; if both fail, save screenshot to `DEBUG_SCREENSHOT_PATH` and throw error with exit code 2
+- [X] T013 [US1] Add lazy-load scroll loop to `src/scraper.ts` — scroll one viewport at a time via `page.evaluate(() => window.scrollBy(0, window.innerHeight))`; wait 1500ms; compare `productCard` count before and after; exit loop when count stabilizes or 5 iterations reached
+- [X] T014 [US1] Add product extraction to `src/scraper.ts` — for each element matching `productCard` selector, extract `strainName`, `brand`, `strainType`, `thcPercent`, and weight/price tiers via `page.evaluate()`; select the tier with the largest numeric weight as `maxWeight`/`maxPrice`; skip cards missing `strainName` or `brand` with a warning log; return `Product[]`
+- [X] T015 [US1] Add site-unreachable retry logic to `src/scraper.ts` — wrap navigation in a loop: retry up to 3 times with 10s delay on `net::ERR_*` or timeout errors; after 3 failures log error and throw with exit code 1
 
 **Checkpoint**: `scrape()` returns a `Product[]` array independently — email and filter not required to validate this story
 
@@ -59,10 +61,10 @@
 
 **Goal**: Pure `filter(products, brands)` function returns only products whose brand matches the configured brand list, with normalization.
 
-**Independent Test**: Run `node --test tests/unit/filter.test.js` and verify all assertions pass on mock product arrays (no browser or network required).
+**Independent Test**: Run `npx vitest run tests/unit/filter.test.ts` and verify all assertions pass on mock product arrays (no browser or network required).
 
-- [ ] T014 [US2] Implement `src/filter.js` — export pure `filter(products, brandsString)` function: split `brandsString` on commas, trim and lowercase each; normalize input brand by lowercasing, trimming, and replacing `"710labs"` with `"710 labs"`; return filtered array; return empty array (no throw) when no matches found
-- [ ] T015 [P] [US2] Write unit tests in `tests/unit/filter.test.js` using `node:test` — cover: multiple brands matched, zero matches, brand with inconsistent casing/whitespace (`" VIOLA "`, `"710 LABS"`, `"710labs"`), empty input array
+- [X] T016 [US2] Implement `src/filter.ts` — export pure `filter(products: Product[], brandsString: string): Product[]` function: split `brandsString` on commas, trim and lowercase each; normalize input brand by lowercasing, trimming, and replacing `"710labs"` with `"710 labs"`; return filtered array; return empty array (no throw) when no matches found
+- [X] T017 [P] [US2] Write unit tests in `tests/unit/filter.test.ts` using Vitest — cover: multiple brands matched, zero matches, brand with inconsistent casing/whitespace (`" VIOLA "`, `"710 LABS"`, `"710labs"`), empty input array; use `describe`/`it`/`expect` from `vitest`
 
 **Checkpoint**: Filter logic independently verified with no browser or network dependency
 
@@ -70,15 +72,15 @@
 
 ## Phase 5: User Story 3 — Email Results via Gmail (Priority: P2)
 
-**Goal**: `mailer.js` builds an HTML email from filtered products and sends it via Gmail SMTP; handles empty results and SMTP failures gracefully.
+**Goal**: `mailer.ts` builds an HTML email from filtered products and sends it via Gmail SMTP; handles empty results and SMTP failures gracefully.
 
-**Independent Test**: Run `node --test tests/unit/mailer.test.js` to verify HTML output structure. For SMTP test: set `HEADLESS=false` and call `mailer.verify()` manually to confirm credentials work.
+**Independent Test**: Run `npx vitest run tests/unit/mailer.test.ts` to verify HTML output structure. For SMTP test: call `verify()` manually to confirm credentials work.
 
-- [ ] T016 [US3] Implement HTML email builder in `src/mailer.js` — export `buildHtml(filteredProducts, date)` pure function: group products by brand; render one `<table>` per brand with columns Strain, Type, THC%, Weight, Price; use `"—"` for any missing field
-- [ ] T017 [US3] Add no-results path to `src/mailer.js` — when `filteredProducts` is empty, generate plain-paragraph body: `"No Viola or 710 Labs flower strains are currently listed on the Krystal Leaves menu as of YYYY-MM-DD."`
-- [ ] T018 [US3] Configure Nodemailer transporter in `src/mailer.js` — `host: smtp.gmail.com`, `port: 587`, `secure: false` (STARTTLS), `auth.user: GMAIL_USER`, `auth.pass: GMAIL_PASS` from config; export `verify()` and `send(html, date)` functions
-- [ ] T019 [US3] Add retry logic to `src/mailer.js` `send()` — on SMTP error, wait 5s and retry once; if second attempt fails, log SMTP error with troubleshooting guidance and throw with exit code 3; subject format: `"Krystal Leaves Flower Menu — Viola & 710 Labs — YYYY-MM-DD"`
-- [ ] T020 [P] [US3] Write unit tests in `tests/unit/mailer.test.js` using `node:test` — cover: `buildHtml` with results (assert table structure, column count, brand grouping), `buildHtml` with empty array (assert no-results paragraph), missing optional fields render as `"—"`
+- [X] T018 [US3] Implement HTML email builder in `src/mailer.ts` — export `buildHtml(filteredProducts: Product[], date: string): string` pure function: group products by brand; render one `<table>` per brand with columns Strain, Type, THC%, Weight, Price; use `"—"` for any missing field
+- [X] T019 [US3] Add no-results path to `src/mailer.ts` — when `filteredProducts` is empty, generate plain-paragraph body: `"No Viola or 710 Labs flower strains are currently listed on the Krystal Leaves menu as of YYYY-MM-DD."`
+- [X] T020 [US3] Configure Nodemailer transporter in `src/mailer.ts` — `host: smtp.gmail.com`, `port: 587`, `secure: false` (STARTTLS), `auth.user: GMAIL_USER`, `auth.pass: GMAIL_PASS` from config; export `verify(): Promise<void>` and `send(html: string, date: string): Promise<void>` functions
+- [X] T021 [US3] Add retry logic to `src/mailer.ts` `send()` — on SMTP error, wait 5s and retry once; if second attempt fails, log SMTP error with troubleshooting guidance and throw with exit code 3; subject format: `"Krystal Leaves Flower Menu — Viola & 710 Labs — YYYY-MM-DD"`
+- [X] T022 [P] [US3] Write unit tests in `tests/unit/mailer.test.ts` using Vitest — cover: `buildHtml` with results (assert table structure, column count, brand grouping), `buildHtml` with empty array (assert no-results paragraph), missing optional fields render as `"—"`; use `describe`/`it`/`expect` from `vitest`
 
 **Checkpoint**: HTML builder verified by unit tests; SMTP send verified manually with real credentials before proceeding
 
@@ -86,15 +88,15 @@
 
 ## Phase 6: User Story 4 — Run as a Single CLI Command (Priority: P2)
 
-**Goal**: `node src/index.js` runs the full pipeline end-to-end, exits with correct code, and always closes the browser.
+**Goal**: `npx tsx src/index.ts` (dev) or `node dist/index.js` (production) runs the full pipeline end-to-end, exits with correct code, and always closes the browser.
 
-**Independent Test**: Run `node src/index.js` with a valid `.env`; verify email received, `logs/YYYY-MM-DD.log` contains full run output, process exits with code 0. Test failure path by setting `TARGET_URL` to an invalid URL and verifying exit code 1.
+**Independent Test**: Run `npx tsx src/index.ts` with a valid `.env`; verify email received, `logs/YYYY-MM-DD.log` contains full run output, process exits with code 0. Test failure path by setting `TARGET_URL` to an invalid URL and verifying exit code 1.
 
-- [ ] T021 [US4] Implement `src/index.js` — orchestrate full pipeline: `config` → `logger.verify()` → `scraper.scrape()` → `filter.filter()` → `mailer.verify()` → `mailer.send()` → log completion; wrap in `try/catch` propagating exit codes 1–3
-- [ ] T022 [US4] Add `finally` block to `src/index.js` — ensure `browser.close()` is always called after pipeline success or any error; log browser-close event
-- [ ] T023 [US4] Pass logger into all pipeline stages in `src/index.js` — log: scraper start/end with product count, filter result count per brand, email send success/failure, total elapsed time, final exit code
+- [X] T023 [US4] Implement `src/index.ts` — orchestrate full pipeline: `config` → `mailer.verify()` → `scraper.scrape()` → `filter.filter()` → `mailer.send()` → log completion; wrap in `try/catch` propagating exit codes 1–3
+- [X] T024 [US4] Add `finally` block to `src/index.ts` — ensure `browser.close()` is always called after pipeline success or any error; log browser-close event
+- [X] T025 [US4] Pass logger into all pipeline stages in `src/index.ts` — log: scraper start/end with product count, filter result count per brand, email send success/failure, total elapsed time, final exit code
 
-**Checkpoint**: Full end-to-end pipeline functional as `node src/index.js`; all exit codes reachable and verified
+**Checkpoint**: Full end-to-end pipeline functional as `npx tsx src/index.ts`; all exit codes reachable and verified
 
 ---
 
@@ -102,10 +104,10 @@
 
 **Goal**: README documents everything needed to clone, configure, run, and schedule the tool.
 
-**Independent Test**: Follow the README from a clean clone; verify the tool runs and sends email within 15 minutes of starting setup (per SC-005).
+**Independent Test**: Follow the README from a clean clone; verify the tool runs and sends email within 15 minutes of starting setup.
 
-- [ ] T024 [US5] Write `README.md` — sections: Prerequisites, Setup (clone → npm install → .env config → selectors.json), Running (`node src/index.js`), Exit codes table, Troubleshooting table (from quickstart.md)
-- [ ] T025 [P] [US5] Add scheduling section to `README.md` — cron example (Linux/Mac) with `>> logs/cron.log 2>&1` redirect, Windows Task Scheduler step-by-step instructions
+- [X] T026 [US5] Write `README.md` — sections: Prerequisites, Setup (clone → npm install → .env config → selectors.json), Running (`npx tsx src/index.ts` for dev; `npm run build && node dist/index.js` for production), Exit codes table, Troubleshooting table
+- [X] T027 [P] [US5] Add scheduling section to `README.md` — cron example (Linux/Mac) with `>> logs/cron.log 2>&1` redirect, Windows Task Scheduler step-by-step instructions
 
 **Checkpoint**: README sufficient for a new user to set up and run the tool without prior context
 
@@ -115,10 +117,10 @@
 
 **Purpose**: Real selector values, npm scripts, integration test, and final validation
 
-- [ ] T026 Populate `selectors.json` with real CSS selectors — manually inspect `https://www.krystaleaves.com/menu` (with `HEADLESS=false`) and fill in all selector values; verify each selector returns expected elements
-- [ ] T027 [P] Write integration test in `tests/integration/scraper.test.js` — create a minimal HTML fixture file mimicking the menu structure; use Puppeteer to load it via `file://` protocol; assert that `scrape()` returns the expected product array from the fixture
-- [ ] T028 [P] Add `npm` scripts to `package.json`: `"start": "node src/index.js"`, `"test": "node --test tests/unit/*.test.js"`, `"test:integration": "node --test tests/integration/*.test.js"`
-- [ ] T029 Run full quickstart.md validation — follow every step in `quickstart.md` from scratch; confirm email delivered with correct format, `logs/` populated, exit code 0; update README if any steps were wrong
+- [ ] T028 Populate `selectors.json` with real CSS selectors — manually inspect `https://www.krystaleaves.com/menu` (with `HEADLESS=false`) and fill in all selector values; verify each selector returns expected elements
+- [ ] T029 [P] Write integration test in `tests/integration/scraper.test.ts` using Vitest — create a minimal HTML fixture file mimicking the menu structure; use Puppeteer to load it via `file://` protocol; assert that `scrape()` returns the expected product array from the fixture; use `describe`/`it`/`expect` from `vitest`
+- [X] T030 [P] Add `npm` scripts to `package.json`: `"dev": "npx tsx src/index.ts"`, `"build": "npx tsc"`, `"start": "node dist/index.js"`, `"typecheck": "npx tsc --noEmit"`, `"test": "npx vitest run tests/unit"`, `"test:integration": "npx vitest run tests/integration"`
+- [ ] T031 Run full validation — run `npm run typecheck` (zero errors), `npm test` (all unit tests pass), confirm `npm run dev` sends email with correct format, `logs/` populated, exit code 0; update README if any steps were wrong
 
 ---
 
@@ -151,19 +153,19 @@ Phase 1 (Setup)
 ### Within Each Phase
 
 - [P]-marked tasks within a phase have no file conflicts — run in parallel
-- Within scraper (Phase 3): T008 → T009 → T010 → T011 → T012 (sequential, same file)
-- Within mailer (Phase 5): T016 → T017 → T018 → T019 (sequential, same file); T020 [P] once T016–T017 exist
+- Within scraper (Phase 3): T010 → T011 → T012 → T013 → T014 → T015 (sequential, same file)
+- Within mailer (Phase 5): T018 → T019 → T020 → T021 (sequential, same file); T022 [P] once T018–T019 exist
 
 ### Parallel Opportunities
 
 | Parallel Group | Tasks |
 |----------------|-------|
-| Phase 1 setup files | T003, T004 |
-| Phase 2 selectors | T007 alongside T005, T006 |
-| US1 + US2 | Phases 3 and 4 (different files: scraper.js vs filter.js) |
+| Phase 1 setup files | T004, T005 |
+| Phase 2 selectors | T009 alongside T006, T007, T008 |
+| US1 + US2 | Phases 3 and 4 (different files: scraper.ts vs filter.ts) |
 | US1 + US2 + US3 | Phases 3, 4, and 5 all depend only on Phase 2 |
-| Unit tests | T015, T020 are [P] once their subject modules exist |
-| Phase 8 | T027, T028 in parallel |
+| Unit tests | T017, T022 are [P] once their subject modules exist |
+| Phase 8 | T029, T030 in parallel |
 
 ---
 
@@ -172,13 +174,13 @@ Phase 1 (Setup)
 ```
 After Phase 2 completes:
 
-  Stream A (scraper.js):          Stream B (filter.js + tests):
-  T008 scraper launch             T014 filter.js implementation
-  T009 iframe detection           T015 filter.test.js unit tests  [P]
-  T010 Flower click
-  T011 scroll loop
-  T012 product extraction
-  T013 retry logic
+  Stream A (scraper.ts):          Stream B (filter.ts + tests):
+  T010 scraper launch             T016 filter.ts implementation
+  T011 iframe detection           T017 filter.test.ts unit tests  [P]
+  T012 Flower click
+  T013 scroll loop
+  T014 product extraction
+  T015 retry logic
 ```
 
 ---
@@ -201,7 +203,7 @@ After Phase 2 completes:
 
 ### Solo Developer Recommended Order
 
-T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008 → T009 → T010 → T011 → T012 → T013 → T014 → T015 → T016 → T017 → T018 → T019 → T020 → T021 → T022 → T023 → T024 → T025 → T026 → T027 → T028 → T029
+T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008 → T009 → T010 → T011 → T012 → T013 → T014 → T015 → T016 → T017 → T018 → T019 → T020 → T021 → T022 → T023 → T024 → T025 → T026 → T027 → T028 → T029 → T030 → T031
 
 ---
 
@@ -210,5 +212,7 @@ T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008 → T009 →
 - [P] = different files, no blocking dependency — safe to run in parallel
 - [Story] label maps each task to its user story for traceability
 - Commit after each phase checkpoint at minimum
-- Set `HEADLESS=false` during T026 to visually inspect selector accuracy
-- T029 is a manual validation step — do not skip it before calling the feature done
+- Set `HEADLESS=false` during T028 to visually inspect selector accuracy
+- T028 and T031 are manual validation steps — do not skip them before calling the feature done
+- TypeScript: compile with `npm run build` (`npx tsc`), type-check with `npm run typecheck` (`npx tsc --noEmit`)
+- Dev runner: `npx tsx src/index.ts` (no compile step needed)
