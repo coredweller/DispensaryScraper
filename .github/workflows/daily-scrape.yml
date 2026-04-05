@@ -24,3 +24,8 @@ jobs:
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           TARGET_URL: ${{ secrets.TARGET_URL }}
           HEADLESS: 'true'
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TIMEZONE: ${{ secrets.TIMEZONE }}

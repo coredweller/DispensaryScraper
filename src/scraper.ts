@@ -13,7 +13,7 @@
  */
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
 import { log } from './logger.js';
-import type { AppConfig, Product } from './types.js';
+import type { AppConfig, ScrapedProduct, ScrapeOutput } from './types.js';
 
 // Dutchie dispensary identifier for Krystal Leaves
 const DUTCHIE_DISPENSARY_ID = '608716726125d300c8c7d9ac';
@@ -23,6 +23,8 @@ const DUTCHIE_APQ_HASH = '98b4aaef79a84ae804b64d550f98dd64d7ba0aa6d836eb6b5d4b2a
 
 const DUTCHIE_API = 'https://dutchie.com/api-0/graphql';
 const PER_PAGE = 50;
+const PRICE_CURRENCY = 'USD';
+const PRICE_PRECISION = 2;
 const RETRY_LIMIT = 3;
 const RETRY_DELAY_MS = 10_000;
 
@@ -114,14 +116,14 @@ function buildDutchieUrl(pageNum: number, perPage: number): string {
   return `${DUTCHIE_API}?${params.toString()}`;
 }
 
-/** Convert a Dutchie product to our internal Product shape. */
-function toProduct(raw: DutchieProduct): Product | null {
+/** Convert a Dutchie product to our internal ScrapedProduct shape. */
+function toProduct(raw: DutchieProduct): ScrapedProduct | null {
   const strainName = raw.Name?.trim();
   const brand = raw.brandName?.trim();
   if (!strainName || !brand) return null;
 
   const thcValue = raw.THCContent?.range?.[0];
-  const thcPercent = thcValue != null && thcValue > 0 ? `${thcValue}%` : undefined;
+  const thcValueNumeric = thcValue != null && thcValue > 0 ? thcValue : undefined;
 
   const strainType =
     raw.strainType && raw.strainType !== 'N/A' && raw.strainType !== 'null'
@@ -130,7 +132,7 @@ function toProduct(raw: DutchieProduct): Product | null {
 
   let maxGrams = -1;
   let maxWeight: string | undefined;
-  let maxPrice: string | undefined;
+  let priceAmount: number | undefined;
 
   const options = raw.Options ?? [];
   const prices = raw.recPrices ?? [];
@@ -140,11 +142,20 @@ function toProduct(raw: DutchieProduct): Product | null {
     if (g > maxGrams) {
       maxGrams = g;
       maxWeight = options[i];
-      maxPrice = prices[i] != null ? `$${prices[i].toFixed(2)}` : undefined;
+      priceAmount = prices[i] != null ? Math.round(prices[i] * Math.pow(10, PRICE_PRECISION)) : undefined;
     }
   }
 
-  return { strainName, brand, strainType, thcPercent, maxWeight, maxPrice };
+  return {
+    strainName,
+    brand,
+    strainType,
+    maxWeight,
+    thcValue: thcValueNumeric,
+    priceAmount,
+    pricePrecision: PRICE_PRECISION,
+    priceCurrency: PRICE_CURRENCY,
+  };
 }
 
 /**
@@ -213,7 +224,7 @@ async function loadMenuPage(page: Page, config: AppConfig): Promise<void> {
   }
 }
 
-export async function scrape(config: AppConfig): Promise<Product[]> {
+export async function scrape(config: AppConfig): Promise<ScrapeOutput> {
   let browser: Browser | null = null;
 
   try {
@@ -364,7 +375,7 @@ export async function scrape(config: AppConfig): Promise<Product[]> {
 
     log(`Total raw Flower products: ${allRaw.length}`);
 
-    const products: Product[] = [];
+    const products: ScrapedProduct[] = [];
     for (const raw of allRaw) {
       const product = toProduct(raw);
       if (!product) {
@@ -374,8 +385,12 @@ export async function scrape(config: AppConfig): Promise<Product[]> {
       products.push(product);
     }
 
+    const pagesFetched = interceptedPages.size > 0
+      ? interceptedPages.size
+      : allRaw.length > 0 ? 1 : 0;
+
     log(`Extraction complete — ${products.length} valid products`);
-    return products;
+    return { products, pagesExpected: interceptedTotalPages, pagesFetched };
   } finally {
     if (browser) {
       await browser.close();
