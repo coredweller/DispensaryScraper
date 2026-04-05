@@ -57,26 +57,27 @@ If the cloud upload fails for any reason (network issue, credential problem, sto
 
 - What happens when the scraper returns zero products? The upload should still occur with an empty products array and a zero product count — preserving the run record for that date.
 - What happens if a file already exists for today's date? The new file overwrites the previous one, so the most recent run is always the authoritative record for that date.
-- What happens if the upload takes longer than expected? The upload must complete before the process exits. If the upload exceeds 30 seconds, the system MUST automatically retry once. If the retry also exceeds 30 seconds or fails, the failure is logged and the process exits cleanly.
+- What happens if the upload takes longer than expected? The upload must complete before the process exits. If the upload exceeds 30 seconds, the system retries once as a full re-upload. If the retry also exceeds 30 seconds or fails, the failure is logged and the process exits cleanly. At no point should a partial file be visible to readers — the storage layer must guarantee atomic replacement.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The system MUST capture all products returned by the scraper each run, regardless of which brands are configured in the filter.
-- **FR-002**: The system MUST structure the captured data as a single file per day, keyed by the scrape date. The timezone used to determine the calendar date MUST be configurable via environment variable (e.g., `TIMEZONE=America/Denver`).
-- **FR-003**: Each product record MUST include: brand, strain name, strain type (if available), THC percentage as a numeric value (e.g., `18.5`, if available), weight option, and price as numeric cents.
-- **FR-004**: The file MUST also include run-level metadata: the scrape date, the precise time the scrape started, the total product count, the number of pages expected, and the number of pages successfully fetched. A consumer can determine completeness by comparing these two counts.
+- **FR-002**: The system MUST structure the captured data as a single file per day, keyed by the scrape date. The timezone used to determine the calendar date MUST be configurable via environment variable (e.g., `TIMEZONE=America/Denver`). If the variable is absent, the system MUST default to UTC and log a warning indicating which timezone is in use, so the behavior is always explicit and traceable.
+- **FR-003**: Each product record MUST include: brand, strain name, strain type (if available), THC percentage as a numeric value (e.g., `18.5`, if available), weight option, and price stored as three fields — amount in the smallest currency unit (e.g., `3500`), decimal precision (e.g., `2`), and currency code (e.g., `"USD"`) — sufficient to reconstruct any display format without storing a pre-formatted string.
+- **FR-004**: The file MUST also include run-level metadata: a unique run identifier (generated fresh each execution), the scrape date, the start time in ISO 8601 UTC format (e.g., `2026-03-29T15:00:01.234Z`), the total product count, the number of pages expected, and the number of pages successfully fetched. A consumer can determine completeness by comparing the page counts, and can distinguish re-runs on the same date by comparing run identifiers.
 - **FR-005**: The system MUST upload the file to cloud storage after scraping completes, regardless of whether the email step succeeded or failed.
-- **FR-006**: If the upload fails or exceeds 30 seconds, the system MUST automatically retry once. If the retry also fails or times out, the system MUST log the failure and continue without crashing or affecting email delivery.
+- **FR-006**: If the upload fails or exceeds 30 seconds, the system MUST automatically retry once as a full re-upload (not a resumable continuation). If the retry also fails or times out, the system MUST log the failure and continue without crashing or affecting email delivery. The storage target MUST guarantee atomic object replacement — a reader must never observe a partial or intermediate file state during an overwrite.
 - **FR-007**: Files MUST be stored under a consistent, date-based path so they are discoverable without a separate index.
-- **FR-008**: The upload destination name, region, and timezone used for date calculation MUST be configurable via environment variables without code changes.
+- **FR-008**: The upload destination name, region, and timezone used for date calculation MUST be configurable via environment variables without code changes. The timezone defaults to UTC when not specified.
 - **FR-009**: Access credentials for cloud storage MUST be supplied via environment variables and MUST NOT be hardcoded.
+- **FR-010**: On startup, before any scraping begins, the system MUST log the active storage configuration: destination name, region, resolved timezone (including whether it defaulted to UTC), and the date the snapshot will be keyed to. Credentials MUST NOT appear in the log output.
 
 ### Key Entities
 
-- **Scrape Run**: Represents one complete daily execution. Attributes: date, start time, total product count, pages fetched, pages expected.
-- **Product Record**: Represents a single menu item captured during a run. Attributes: brand, strain name, strain type, THC% (numeric float only, e.g., `18.5`), weight option, price (display string and numeric cents).
+- **Scrape Run**: Represents one complete daily execution. Attributes: run identifier (unique per execution), date (in configured timezone), start time (ISO 8601 UTC), total product count, pages fetched, pages expected.
+- **Product Record**: Represents a single menu item captured during a run. Attributes: brand, strain name, strain type, THC% (numeric float, e.g., `18.5`), weight option, price amount (integer, smallest currency unit, e.g., `3500`), price precision (integer, e.g., `2`), price currency (ISO 4217 code, e.g., `"USD"`).
 - **Daily Snapshot File**: A single structured file grouping one run's metadata and all its product records, named and stored by date.
 
 ## Success Criteria *(mandatory)*
@@ -107,3 +108,9 @@ If the cloud upload fails for any reason (network issue, credential problem, sto
 - The full product list (all brands) is already available internally during each run; this feature exposes it to storage rather than requiring an additional scrape pass.
 - Data retention and lifecycle policies for stored files are managed by the user directly in cloud storage — the scraper does not delete or archive old files.
 - The scraper run is always triggered via the existing automated daily schedule; no on-demand or manual upload trigger is required.
+- The scraper will return a richer `ScrapedProduct` type (extending the existing `Product` type) that carries raw numeric values — `thcValue` (float), `priceAmount` (integer), `pricePrecision` (integer), `priceCurrency` (ISO 4217) — alongside the existing display strings. The snapshot module reads the numeric fields directly without parsing display strings.
+- `filter()` MUST accept and return `ScrapedProduct[]`, preserving all fields so downstream consumers receive the enriched type without a separate code path.
+- The `scrape()` function will return a `ScrapeOutput` wrapper — `{ products: ScrapedProduct[], pagesExpected: number, pagesFetched: number }` — so pagination metadata is available to the snapshot module without a separate call. `pagesExpected` is the `totalPages` value from the Dutchie API response; `pagesFetched` is the count of distinct page indices for which at least one product was successfully retrieved, whether by interception or frame fetch.
+- `priceCurrency` will be hardcoded to `"USD"` as a constant; the Dutchie API does not expose a currency field.
+- `buildHtml()` MUST derive all price and THC display values from the numeric fields on `ScrapedProduct` (`priceAmount`, `pricePrecision`, `priceCurrency`, `thcValue`) rather than the existing display strings (`maxPrice`, `thcPercent`). This establishes the numeric fields as the single source of truth across both the email and snapshot outputs.
+- The display string fields `maxPrice?: string` and `thcPercent?: string` on `Product` are candidates for removal in a future cleanup once all consumers derive values from the numeric fields. They MUST NOT be removed in this feature — only marked as deprecated internally.
