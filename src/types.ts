@@ -68,8 +68,6 @@ export interface AppConfig {
   selectors: SelectorConfig;
   s3Bucket: string;
   s3Region: string;
-  awsAccessKeyId: string;
-  awsSecretAccessKey: string;
   /** IANA timezone name, e.g. "America/Denver". Defaults to "UTC". */
   timezone: string;
 }

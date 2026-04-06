@@ -82,13 +82,7 @@ export async function saveSnapshot(
     })),
   }, null, 2);
 
-  const client = new S3Client({
-    region: config.s3Region,
-    credentials: {
-      accessKeyId: config.awsAccessKeyId,
-      secretAccessKey: config.awsSecretAccessKey,
-    },
-  });
+  const client = new S3Client({ region: config.s3Region });
 
   try {
     await attemptUpload(client, config.s3Bucket, key, payload);

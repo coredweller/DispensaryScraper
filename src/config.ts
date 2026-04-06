@@ -16,8 +16,6 @@ const envSchema = z.object({
     .max(63, 'S3_BUCKET must be 63 characters or fewer')
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'S3_BUCKET must contain only lowercase letters, numbers, and hyphens, and must start/end with a letter or number'),
   S3_REGION: z.string().default('us-east-1'),
-  AWS_ACCESS_KEY_ID: z.string().min(1, 'AWS_ACCESS_KEY_ID is required'),
-  AWS_SECRET_ACCESS_KEY: z.string().min(1, 'AWS_SECRET_ACCESS_KEY is required'),
   TIMEZONE: z.string().default('UTC'),
 });
 
@@ -71,8 +69,6 @@ function loadConfig(): AppConfig {
     selectors,
     s3Bucket: env.S3_BUCKET,
     s3Region: env.S3_REGION,
-    awsAccessKeyId: env.AWS_ACCESS_KEY_ID,
-    awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY,
     timezone: env.TIMEZONE,
   };
 }
