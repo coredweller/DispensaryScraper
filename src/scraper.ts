@@ -47,7 +47,7 @@ const WEIGHT_TO_GRAMS: Record<string, number> = {
   '1oz': 28,
 };
 
-function weightToGrams(option: string): number {
+export function weightToGrams(option: string): number {
   const normalized = option.toLowerCase().trim();
   if (WEIGHT_TO_GRAMS[normalized] !== undefined) return WEIGHT_TO_GRAMS[normalized];
   const gramMatch = normalized.match(/^(\d+(?:\.\d+)?)g$/);
