@@ -1,15 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { log, closeLog } from './logger.js';
 import { scrape } from './scraper.js';
 import { filter } from './filter.js';
 import { verify, send, buildHtml } from './mailer.js';
+import { logStorageConfig, saveSnapshot } from './store.js';
 
 async function main(): Promise<void> {
-  const startTime = Date.now();
-  const date = new Date().toISOString().slice(0, 10);
+  const runId = randomUUID();
+  const startTime = new Date().toISOString();
+  const startMs = Date.now();
+  const date = startTime.slice(0, 10);
 
   log(`Starting scraper — target: ${config.targetUrl}`);
   log(`Filtering for brands: ${config.brands}`);
+  logStorageConfig(config);
 
   // Verify SMTP credentials before launching the browser
   log('Verifying SMTP credentials');
@@ -18,8 +23,8 @@ async function main(): Promise<void> {
 
   // Scrape
   log('Launching browser and scraping menu');
-  const products = await scrape(config);
-  log(`Scrape complete — ${products.length} total products extracted`);
+  const { products, pagesExpected, pagesFetched } = await scrape(config);
+  log(`Scrape complete — ${products.length} total products extracted (pages: ${pagesFetched}/${pagesExpected})`);
 
   // Filter
   const filteredProducts = filter(products, config.brands);
@@ -39,15 +44,22 @@ async function main(): Promise<void> {
 
   // Build and send email
   const html = buildHtml(filteredProducts, date);
-  await send(html, date, config);
-
-  if (filteredProducts.length === 0) {
-    log(`No-results email sent to ${config.recipientEmail}`);
-  } else {
-    log(`Email sent to ${config.recipientEmail}`);
+  try {
+    await send(html, date, config);
+    if (filteredProducts.length === 0) {
+      log(`No-results email sent to ${config.recipientEmail}`);
+    } else {
+      log(`Email sent to ${config.recipientEmail}`);
+    }
+  } catch (emailErr) {
+    const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+    log(`ERROR: Email send failed: ${msg}`);
   }
 
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  // Upload snapshot unconditionally — failures are caught inside saveSnapshot
+  await saveSnapshot({ products, pagesExpected, pagesFetched }, runId, startTime, config);
+
+  const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   log(`Done — ${elapsed}s — exit code 0`);
 }
 

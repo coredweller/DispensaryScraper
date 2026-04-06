@@ -1,11 +1,11 @@
 import nodemailer from 'nodemailer';
-import type { AppConfig, Product } from './types.js';
+import type { AppConfig, ScrapedProduct } from './types.js';
 
 const RETRY_DELAY_MS = 5_000;
 
 /** Groups products by brand name for email rendering. */
-function groupByBrand(products: Product[]): Map<string, Product[]> {
-  const groups = new Map<string, Product[]>();
+function groupByBrand(products: ScrapedProduct[]): Map<string, ScrapedProduct[]> {
+  const groups = new Map<string, ScrapedProduct[]>();
   for (const product of products) {
     const existing = groups.get(product.brand) ?? [];
     existing.push(product);
@@ -24,18 +24,22 @@ function escapeHtml(str: string): string {
 }
 
 /** Renders a single brand table for the email body. */
-function renderBrandTable(brand: string, products: Product[]): string {
+function renderBrandTable(brand: string, products: ScrapedProduct[]): string {
   const rows = products
-    .map(
-      p => `
+    .map(p => {
+      const thcDisplay = p.thcValue != null ? `${p.thcValue}%` : '—';
+      const priceDisplay = p.priceAmount != null
+        ? `$${(p.priceAmount / Math.pow(10, p.pricePrecision)).toFixed(p.pricePrecision)}`
+        : '—';
+      return `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(p.strainName)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(p.strainType ?? '—')}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(p.thcPercent ?? '—')}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(thcDisplay)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(p.maxWeight ?? '—')}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(p.maxPrice ?? '—')}</td>
-      </tr>`,
-    )
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(priceDisplay)}</td>
+      </tr>`;
+    })
     .join('');
 
   return `
@@ -58,7 +62,7 @@ function renderBrandTable(brand: string, products: Product[]): string {
  * Builds the HTML email body from filtered products.
  * Returns a no-results paragraph when the array is empty.
  */
-export function buildHtml(filteredProducts: Product[], date: string): string {
+export function buildHtml(filteredProducts: ScrapedProduct[], date: string): string {
   if (filteredProducts.length === 0) {
     return `<p style="font-family:sans-serif;font-size:14px;color:#555;">No Viola or 710 Labs flower strains are currently listed on the Krystal Leaves menu as of ${escapeHtml(date)}.</p>`;
   }

@@ -13,6 +13,7 @@
     "test:integration": "npx vitest run tests/integration"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1024.0",
     "dotenv": "^16.4.5",
     "nodemailer": "^6.9.13",
     "puppeteer": "^23.0.0",

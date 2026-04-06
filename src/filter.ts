@@ -21,7 +21,7 @@ function normalizeBrand(brand: string): string {
  * so that spelling variants like "710labs" / "710 Labs" / "710 LABS" all match.
  * Returns an empty array (never throws) when no products match.
  */
-export function filter(products: Product[], brandsString: string): Product[] {
+export function filter<T extends Product>(products: T[], brandsString: string): T[] {
   const targetBrands = brandsString
     .split(',')
     .map(b => normalizeBrand(b))

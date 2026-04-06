@@ -11,6 +11,12 @@ const envSchema = z.object({
   RECIPIENT_EMAIL: z.string().email('RECIPIENT_EMAIL must be a valid email address'),
   HEADLESS: z.string().default('true'),
   DEBUG_SCREENSHOT_PATH: z.string().default('screenshots/debug.png'),
+  S3_BUCKET: z.string()
+    .min(3, 'S3_BUCKET must be at least 3 characters')
+    .max(63, 'S3_BUCKET must be 63 characters or fewer')
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'S3_BUCKET must contain only lowercase letters, numbers, and hyphens, and must start/end with a letter or number'),
+  S3_REGION: z.string().default('us-east-1'),
+  TIMEZONE: z.string().default('UTC'),
 });
 
 const selectorSchema = z.object({
@@ -48,6 +54,10 @@ function loadConfig(): AppConfig {
     process.exit(1);
   }
 
+  if (!process.env.TIMEZONE) {
+    console.warn('[CONFIG WARN] TIMEZONE not set — defaulting to UTC. Set TIMEZONE=America/Denver (or your timezone) for date-accurate snapshots.');
+  }
+
   return {
     targetUrl: env.TARGET_URL,
     brands: env.BRANDS,
@@ -57,6 +67,9 @@ function loadConfig(): AppConfig {
     headless: env.HEADLESS !== 'false',
     debugScreenshotPath: env.DEBUG_SCREENSHOT_PATH,
     selectors,
+    s3Bucket: env.S3_BUCKET,
+    s3Region: env.S3_REGION,
+    timezone: env.TIMEZONE,
   };
 }
 
