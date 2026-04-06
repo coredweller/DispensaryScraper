@@ -15,7 +15,7 @@ const envSchema = z.object({
     .min(3, 'S3_BUCKET must be at least 3 characters')
     .max(63, 'S3_BUCKET must be 63 characters or fewer')
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'S3_BUCKET must contain only lowercase letters, numbers, and hyphens, and must start/end with a letter or number'),
-  S3_REGION: z.string().default('us-east-1'),
+  S3_REGION: z.string().default('us-east-2'),
   TIMEZONE: z.string().default('UTC'),
 });
 
